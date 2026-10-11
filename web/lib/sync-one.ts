@@ -64,7 +64,16 @@ export function buildSyncDeps(sql: Sql, options: SyncOneOptions = {}): SyncDeps 
   return {
     store: postgresSyncStore(sql),
     // Built once, lazily: the dry-run/no-candidate paths never log in to Garmin.
-    gateway: () => (gateway ??= clientFactory().then(garminGateway)),
+    gateway: () => (gateway ??= clientFactory().then((client) => {
+      const base = garminGateway(client);
+      return {
+        ...base,
+        // The published engine adds this footer; omit it at the write boundary
+        // so uploads, merges, resyncs and pending-upload recovery agree.
+        describe: (activityId: number, description: string) =>
+          base.describe(activityId, description.replace(/\n\n— synced by hevy2garmin$/, "")),
+      };
+    })),
     fetchWorkouts: async () => {
       const all = await fetchWorkouts();
       // Applied HERE, before the engine sees the list, so listCandidates and
