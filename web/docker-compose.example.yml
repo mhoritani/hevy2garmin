@@ -42,6 +42,8 @@ services:
       # The app creates its tables on first use; nothing to migrate by hand.
       DATABASE_URL: postgres://hevy2garmin:${POSTGRES_PASSWORD}@db:5432/hevy2garmin
       H2G_PASSWORD: ${H2G_PASSWORD:?set H2G_PASSWORD in .env}
+      # Only reachable from this machine and no login wanted? Drop H2G_PASSWORD and
+      # HEVY2GARMIN_SECRET above and set H2G_AUTH_DISABLED: "true" instead.
       HEVY2GARMIN_SECRET: ${HEVY2GARMIN_SECRET:?set HEVY2GARMIN_SECRET in .env}
       CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
       # Optional ones from .env.example (INTERVALS_API_KEY, INTERVALS_ATHLETE_ID, ...)

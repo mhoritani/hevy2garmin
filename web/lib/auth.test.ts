@@ -111,6 +111,10 @@ describe("auth env parity with the Python dashboard (#460)", () => {
     expect(await verifyPassword("hunter3")).toBe(false);
     const c = await signSession(0); expect(await verifySession(c, 0)).toBe(true);
   });
+  it("H2G_AUTH_DISABLED turns auth off even when a password is set", () => {
+    reset(); process.env.H2G_PASSWORD = "plain"; process.env.H2G_AUTH_DISABLED = "true";
+    try { expect(authEnabled()).toBe(false); } finally { delete process.env.H2G_AUTH_DISABLED; }
+  });
   it("falls back to the plaintext password when no hash is set", async () => {
     reset(); process.env.H2G_PASSWORD = "plain";
     expect(await verifyPassword("plain")).toBe(true); expect(await verifyPassword("wrong")).toBe(false);

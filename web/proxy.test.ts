@@ -85,6 +85,17 @@ describe("proxy: production without a password serves only the setup and login p
     vi.unstubAllEnvs();
   });
 
+  it("H2G_AUTH_DISABLED opens every route, even with a password still set", async () => {
+    process.env.H2G_PASSWORD = "still-set";
+    process.env.H2G_AUTH_DISABLED = "true";
+    try {
+      expect(passedThrough(await proxy(req("/dashboard")))).toBe(true);
+      expect(passedThrough(await proxy(req("/api/settings", {}, "POST")))).toBe(true);
+    } finally {
+      delete process.env.H2G_AUTH_DISABLED;
+    }
+  });
+
   it("a page is redirected to /setup with 307", async () => {
     const res = await proxy(req("/dashboard"));
     expect(res.status).toBe(307);

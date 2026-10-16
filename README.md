@@ -300,7 +300,7 @@ See [`.env.example`](.env.example) for all available env vars.
 
 ## Securing the dashboard
 
-The web dashboard in `web/` requires a password on every page and API route: set `H2G_PASSWORD` (or an argon2 `H2G_PASSWORD_HASH`) and `HEVY2GARMIN_SECRET` for the session cookie, plus `CRON_SECRET` for the cron and webhook routes. `web/.env.example` lists them. Without `H2G_PASSWORD` the app refuses to serve anything but the setup page, so a public URL is never open by accident.
+The web dashboard in `web/` requires a password on every page and API route: set `H2G_PASSWORD` (or an argon2 `H2G_PASSWORD_HASH`) and `HEVY2GARMIN_SECRET` for the session cookie, plus `CRON_SECRET` for the cron and webhook routes. `web/.env.example` lists them. Without `H2G_PASSWORD` the app refuses to serve anything but the setup page, so a public URL is never open by accident. For a self-hosted instance only reachable from your own machine, `H2G_AUTH_DISABLED=true` turns the login off on purpose; never set it on a public deploy.
 
 ## Self-hosting
 

@@ -78,8 +78,16 @@ async function hmacHex32(data: string): Promise<string> {
   return toHex(sig).slice(0, 32);
 }
 
-/** True when auth is configured (either a secret or a password is present). */
+/** True when H2G_AUTH_DISABLED explicitly opts out of the dashboard password, e.g. for a
+    self-hosted instance that is only reachable from localhost. */
+export function authDisabled(): boolean {
+  const v = (process.env.H2G_AUTH_DISABLED ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+/** True when auth is configured (either a secret or a password is present) and not opted out. */
 export function authEnabled(): boolean {
+  if (authDisabled()) return false;
   return Boolean(process.env.HEVY2GARMIN_SECRET || process.env.H2G_SECRET || process.env.H2G_PASSWORD || process.env.H2G_PASSWORD_HASH);
 }
 

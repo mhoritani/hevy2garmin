@@ -89,7 +89,14 @@ async function verifySession(cookie: string | null, epoch: number): Promise<bool
   }
 }
 
+/* Mirrors lib/auth.ts authDisabled (inlined for the bundler reason above). */
+function authDisabled(): boolean {
+  const v = (process.env.H2G_AUTH_DISABLED ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
 function authEnabled(): boolean {
+  if (authDisabled()) return false;
   return Boolean(process.env.HEVY2GARMIN_SECRET || process.env.H2G_SECRET || process.env.H2G_PASSWORD || process.env.H2G_PASSWORD_HASH);
 }
 
@@ -197,7 +204,8 @@ export async function proxy(req: NextRequest) {
     return demoRefusal();
   }
   if (!authEnabled()) {
-    if (!productionRuntime()) return NextResponse.next();
+    // H2G_AUTH_DISABLED is a deliberate opt-out, not the accident #550 guards against.
+    if (!productionRuntime() || authDisabled()) return NextResponse.next();
     if (UNCONFIGURED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
       return NextResponse.next();
     }
