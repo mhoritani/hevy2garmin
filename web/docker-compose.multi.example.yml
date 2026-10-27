@@ -1,0 +1,100 @@
+# Two people on one server: one Postgres with a database each, and one dashboard
+# container each. The instances share nothing but the Postgres server, so each
+# person has their own login, Hevy key, Garmin account, settings and sync
+# history, and each syncs on the schedule set by its own Auto-sync toggle.
+#
+#   cd web
+#   cp docker-compose.multi.example.yml docker-compose.yml
+#   # create .env next to it (see the README, "Several people on one server")
+#   docker compose up -d --build
+#
+# The first person's dashboard answers on http://127.0.0.1:8096, the second's on
+# http://127.0.0.1:8097. Give each its own hostname behind your reverse proxy:
+# browsers share cookies between ports on one hostname, so two instances on
+# localhost sign each other out.
+#
+# The first instance uses the database the single-person compose file uses, so
+# switching from that file keeps its data. To add a third person, copy the
+# web-partner service with a new port, database and secrets, and add the
+# database name to db-init.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hevy2garmin
+      POSTGRES_USER: hevy2garmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hevy2garmin -d hevy2garmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Creates the extra databases. Postgres creates only POSTGRES_DB by itself,
+  # and only on an empty volume; this also works on an existing one, and does
+  # nothing for a database that is already there.
+  db-init:
+    image: postgres:16
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: hevy2garmin
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: hevy2garmin
+      DATABASES: hevy2garmin_partner
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for name in $$DATABASES; do
+          if [ -z "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$name'")" ]; then
+            psql -c "CREATE DATABASE \"$$name\""
+          fi
+        done
+
+  web:
+    build:
+      context: .
+      args:
+        H2G_BASE_PATH: ${H2G_BASE_PATH:-}
+    image: hevy2garmin-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8096:8096"
+    environment:
+      DATABASE_URL: postgres://hevy2garmin:${POSTGRES_PASSWORD}@db:5432/hevy2garmin
+      H2G_PASSWORD: ${H2G_PASSWORD:?set H2G_PASSWORD in .env}
+      HEVY2GARMIN_SECRET: ${HEVY2GARMIN_SECRET:?set HEVY2GARMIN_SECRET in .env}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+
+  web-partner:
+    image: hevy2garmin-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      # Built by the web service; this one reuses the image.
+      web:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8097:8096"
+    environment:
+      DATABASE_URL: postgres://hevy2garmin:${POSTGRES_PASSWORD}@db:5432/hevy2garmin_partner
+      H2G_PASSWORD: ${PARTNER_H2G_PASSWORD:?set PARTNER_H2G_PASSWORD in .env}
+      HEVY2GARMIN_SECRET: ${PARTNER_HEVY2GARMIN_SECRET:?set PARTNER_HEVY2GARMIN_SECRET in .env}
+      CRON_SECRET: ${PARTNER_CRON_SECRET:?set PARTNER_CRON_SECRET in .env}
+
+volumes:
+  db_data:

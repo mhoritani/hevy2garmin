@@ -369,6 +369,27 @@ Leave `GITHUB_PAT` and `GITHUB_REPO` unset on a self-hosted box. With both set, 
 
 On Vercel, the dashboard's **Auto-sync** toggle and interval schedule that GitHub Actions workflow instead. When your own scheduler calls the cron route, set `H2G_SERVER_SYNC_SCHEDULE` to how often it runs, in words (`every 2 hours`): the built-in scheduler then stays off, and the dashboard and Settings show that schedule in place of the toggle, the interval and the GitHub token.
 
+### Several people on one server
+
+Each dashboard is one person: one password, one Hevy key, one Garmin account. For two people, run two instances side by side, each with its own database. `web/docker-compose.multi.example.yml` does this with one Postgres server: a database for each person, a dashboard for each (ports 8096 and 8097), and a one-shot `db-init` service that creates the extra database, also on an existing volume. Each person signs in to their own dashboard, connects Hevy and Garmin there, and turns on its **Auto-sync**.
+
+```bash
+cd hevy2garmin/web
+cp docker-compose.multi.example.yml docker-compose.yml
+cat > .env <<'EOF'
+POSTGRES_PASSWORD=pick-a-database-password
+H2G_PASSWORD=first-dashboard-password
+HEVY2GARMIN_SECRET=32-random-characters
+CRON_SECRET=another-32-random-characters
+PARTNER_H2G_PASSWORD=second-dashboard-password
+PARTNER_HEVY2GARMIN_SECRET=32-other-random-characters
+PARTNER_CRON_SECRET=yet-another-32-random-characters
+EOF
+docker compose up -d --build
+```
+
+The first instance uses the same database as the single-person compose file, so switching to this file keeps your data. Give each instance its own hostname behind the reverse proxy: browsers share cookies between ports on one hostname, so two dashboards both on `localhost` sign each other out.
+
 ### Removing duplicates from intervals.icu
 
 The `replace` watch strategy deletes the watch recording from Garmin once the named activity is uploaded, so Garmin ends up with one activity. Garmin deletions do not propagate, though: if you also sync Garmin to [intervals.icu](https://intervals.icu), the copy it already pulled stays there, and every merged workout leaves a duplicate behind.
