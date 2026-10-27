@@ -7,7 +7,7 @@ import { SyncLoop } from "@/components/sync-loop";
 import { BatchSync } from "@/components/batch-sync";
 import { AutoSyncToggle } from "@/components/autosync-toggle";
 import { ServerSchedule } from "@/components/server-schedule";
-import { serverSyncSchedule } from "@/lib/server-schedule";
+import { builtinSchedulerEnabled, serverSyncSchedule } from "@/lib/server-schedule";
 import { PipelineDiagram } from "@/components/pipeline-diagram";
 import { HEVY_TO_GARMIN } from "hevy2garmin";
 import { withBasePath } from "@/lib/base-path";
@@ -308,7 +308,7 @@ export default async function DashboardPage() {
         <SyncLoop ready={data.hevyConnected && data.garminConnected} />
       </div>
       <div className="mt-3">
-        <BatchSync ready={data.hevyConnected && data.garminConnected} onServer={serverSyncSchedule() != null} />
+        <BatchSync ready={data.hevyConnected && data.garminConnected} onServer={serverSyncSchedule() != null || builtinSchedulerEnabled()} />
       </div>
 
       <div className="mb-8">

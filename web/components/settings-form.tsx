@@ -10,6 +10,9 @@ interface Props {
   /** A self-hosted server's own sync schedule (lib/server-schedule.ts). When set, the
       GitHub token and the auto-sync controls, which only drive GitHub Actions, are hidden. */
   serverSchedule?: string | null;
+  /** This server's own timer runs auto-sync (lib/auto-sync-scheduler.ts), so the GitHub
+      token, which only sets up the GitHub Actions workflow, is hidden. */
+  builtinScheduler?: boolean;
   autoSyncEnabled: boolean;
   autoSyncInterval: number;
   hrFusionEnabled: boolean;
@@ -184,7 +187,7 @@ export function SettingsForm(p: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      {!p.serverSchedule && <div className={cardCls}>
+      {!p.serverSchedule && !p.builtinScheduler && <div className={cardCls}>
         <label className={labelCls} htmlFor="github_pat">GitHub token (auto-sync on your fork)</label>
         <input id="github_pat" type="password" autoComplete="off" value={githubPat} onChange={(e) => setGithubPat(e.target.value)}
           placeholder={p.githubTokenSet ? "•••• saved — enter a new one to replace it" : "ghp_… (repo + workflow scope)"} className={controlCls} />

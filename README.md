@@ -334,11 +334,12 @@ docker compose up -d --build   # http://127.0.0.1:8096
 
 `openssl rand -hex 32` makes a good secret. Then open the dashboard and connect Hevy and Garmin on the setup page, the same as on Vercel.
 
-The compose file starts three containers:
+The compose file starts two containers:
 
 - `db`, Postgres 16, with its data in the `db_data` volume. It is the only state; the web container holds none.
 - `web`, the dashboard on port 8096, bound to `127.0.0.1`. It runs as the unprivileged `node` user, and its health check is `GET /api/version`, which needs neither a session nor the database.
-- `cron`, which calls `GET /api/cron/sync` every two hours (`SYNC_INTERVAL_SECONDS` in `.env` changes it). Without something calling that route, a self-hosted dashboard only syncs when you press **Sync Now** or Hevy sends a webhook. The `web` service sets `H2G_SERVER_SYNC_SCHEDULE` to match, so the dashboard shows this schedule; change both together.
+
+To sync on a schedule, turn on **Auto-sync** on the dashboard and pick an interval. The `web` container runs the sync itself (see [Keeping it in sync](#keeping-it-in-sync)); no separate scheduler is needed.
 
 To run the image without compose, build it with `docker build -t hevy2garmin-web web/` and pass the same variables with `-e`, pointing `DATABASE_URL` at your Postgres. The image builds and runs on amd64 and arm64. Build it on the machine that runs it: an emulated cross-build under QEMU crashes in Next's build step. To have `/api/version` report the commit you built, set `HEVY2GARMIN_COMMIT_SHA` when you start the container.
 
@@ -356,7 +357,9 @@ With Docker, put `H2G_BASE_PATH=/tools/hevy2garmin` in `.env` before `docker com
 
 The web app syncs when you press **Sync Now**, on its cron route, and on a Hevy webhook (`POST /api/cron/webhook` with `Authorization: Bearer <CRON_SECRET>`). The CLI is the other option: `hevy2garmin sync` from cron, with credentials saved by `hevy2garmin init`.
 
-The cron route is `GET /api/cron/sync` with the same bearer. Vercel calls it daily; a self-hosted box needs a scheduler of its own. The compose file above has one. With plain cron it is this line, with your secret written in place of `$CRON_SECRET`, because cron does not read `.env`:
+On a self-hosted server (Docker or `npm start`), the dashboard's **Auto-sync** toggle and interval drive a scheduler inside the server process. Once a minute it checks the setting, and when auto-sync is on and the interval has passed since its last run it syncs the backlog the same way the cron route does, waiting out the grace period for recent workouts. Its runs show as `schedule` under **Sync history**, and each one is logged to the container output as `[auto-sync] ...`. The interval counts from the last scheduled run in the database, so a restart does not sync early. `H2G_BUILTIN_SCHEDULER=off` turns it off.
+
+The cron route is `GET /api/cron/sync` with the same bearer. Vercel calls it daily. Self-hosted, you can call it from a scheduler of your own instead of using the built-in one. With plain cron it is this line, with your secret written in place of `$CRON_SECRET`, because cron does not read `.env`:
 
 ```bash
 0 */2 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:8096/api/cron/sync
@@ -364,7 +367,7 @@ The cron route is `GET /api/cron/sync` with the same bearer. Vercel calls it dai
 
 Leave `GITHUB_PAT` and `GITHUB_REPO` unset on a self-hosted box. With both set, the route hands the run to the GitHub Actions workflow on your fork instead of syncing on the server.
 
-The dashboard's **Auto-sync** toggle and interval schedule that GitHub Actions workflow, so on a self-hosted box they change nothing. Set `H2G_SERVER_SYNC_SCHEDULE` to how often your scheduler runs, in words (`every 2 hours`): the dashboard and Settings then show that schedule in place of the toggle, the interval and the GitHub token, and **Sync all** says it runs on the server.
+On Vercel, the dashboard's **Auto-sync** toggle and interval schedule that GitHub Actions workflow instead. When your own scheduler calls the cron route, set `H2G_SERVER_SYNC_SCHEDULE` to how often it runs, in words (`every 2 hours`): the built-in scheduler then stays off, and the dashboard and Settings show that schedule in place of the toggle, the interval and the GitHub token.
 
 ### Removing duplicates from intervals.icu
 
