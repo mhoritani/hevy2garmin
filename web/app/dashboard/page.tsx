@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { effectiveGraceMinutes } from "@/lib/sync-grace";
 import { DatabaseDownPage } from "@/components/database-down";
 import { ifNoTable } from "@/lib/missing-table";
 import { loadGarminConnection, loadHevyConnection } from "@/lib/connections";
@@ -7,7 +8,7 @@ import { SyncLoop } from "@/components/sync-loop";
 import { BatchSync } from "@/components/batch-sync";
 import { AutoSyncToggle } from "@/components/autosync-toggle";
 import { ServerSchedule } from "@/components/server-schedule";
-import { serverSyncSchedule } from "@/lib/server-schedule";
+import { builtinSchedulerEnabled, serverSyncSchedule } from "@/lib/server-schedule";
 import { PipelineDiagram } from "@/components/pipeline-diagram";
 import { HEVY_TO_GARMIN } from "hevy2garmin";
 import { withBasePath } from "@/lib/base-path";
@@ -52,6 +53,7 @@ interface DashboardData {
   syncLog: SyncLogEntry[];
   autoSyncEnabled: boolean;
   autoSyncInterval: number;
+  graceMinutes: number;
 }
 
 const EMPTY: DashboardData = {
@@ -69,6 +71,7 @@ const EMPTY: DashboardData = {
   syncLog: [],
   autoSyncEnabled: false,
   autoSyncInterval: 120,
+  graceMinutes: effectiveGraceMinutes(undefined),
 };
 
 async function loadDashboard(): Promise<DashboardData> {
@@ -82,7 +85,7 @@ async function loadDashboard(): Promise<DashboardData> {
   try {
     // A missing table degrades to a sane default. Any other failure means the database did not
     // answer, and the catch below says so rather than showing an empty account (#765).
-    const [hevyConn, garminConn, counts, recent, syncLog, autoSync, pendingRow, routinesRow] = await Promise.all([
+    const [hevyConn, garminConn, counts, recent, syncLog, autoSync, syncConfig, pendingRow, routinesRow] = await Promise.all([
       loadHevyConnection(sql),
       loadGarminConnection(sql),
       sql`
@@ -112,6 +115,9 @@ async function loadDashboard(): Promise<DashboardData> {
       sql`
         SELECT value FROM app_cache WHERE key = 'auto_sync' LIMIT 1
       `.catch(ifNoTable([] as Array<{ value: unknown }>)),
+      sql`
+        SELECT value FROM app_cache WHERE key = 'sync' LIMIT 1
+      `.catch(ifNoTable([] as Array<{ value: unknown }>)),
       sql`SELECT count(*)::int AS n FROM pending_uploads`.catch(ifNoTable([] as Array<{ n: number }>)),
       sql`
         SELECT
@@ -126,6 +132,11 @@ async function loadDashboard(): Promise<DashboardData> {
     const autoSyncValue =
       autoSync[0]?.value && typeof autoSync[0].value === "object"
         ? (autoSync[0].value as Record<string, unknown>)
+        : {};
+
+    const syncValue =
+      syncConfig[0]?.value && typeof syncConfig[0].value === "object"
+        ? (syncConfig[0].value as Record<string, unknown>)
         : {};
 
     return {
@@ -161,6 +172,7 @@ async function loadDashboard(): Promise<DashboardData> {
       })),
       autoSyncEnabled: Boolean(autoSyncValue.enabled),
       autoSyncInterval: Number(autoSyncValue.interval_minutes) || 120,
+      graceMinutes: effectiveGraceMinutes(syncValue.grace_period_minutes),
     };
   } catch (error) {
     console.error("[loadDashboard] the database did not answer:", (error as Error)?.message ?? error);
@@ -308,14 +320,14 @@ export default async function DashboardPage() {
         <SyncLoop ready={data.hevyConnected && data.garminConnected} />
       </div>
       <div className="mt-3">
-        <BatchSync ready={data.hevyConnected && data.garminConnected} onServer={serverSyncSchedule() != null} />
+        <BatchSync ready={data.hevyConnected && data.garminConnected} onServer={serverSyncSchedule() != null || builtinSchedulerEnabled()} />
       </div>
 
       <div className="mb-8">
         {serverSyncSchedule() ? (
           <ServerSchedule schedule={serverSyncSchedule() ?? ""} />
         ) : (
-          <AutoSyncToggle enabled={data.autoSyncEnabled} interval={data.autoSyncInterval} />
+          <AutoSyncToggle enabled={data.autoSyncEnabled} interval={data.autoSyncInterval} graceMinutes={data.graceMinutes} />
         )}
       </div>
 

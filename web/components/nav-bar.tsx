@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { withBasePath } from "@/lib/base-path";
+import { ProfileSwitcher } from "./profile-switcher";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "◉" },
@@ -41,9 +42,12 @@ export function NavBar({ authEnabled = false }: { authEnabled?: boolean }) {
     <>
       {/* Desktop: top bar */}
       <nav className="hidden md:flex items-center justify-between px-6 py-3 bg-surface-elevated border-b border-border sticky top-0 z-40">
-        <Link href="/dashboard" className="text-lg font-bold text-text">
-          hevy2garmin
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="text-lg font-bold text-text">
+            hevy2garmin
+          </Link>
+          <ProfileSwitcher />
+        </div>
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map(({ href, label }) => (
             <Link
@@ -72,6 +76,9 @@ export function NavBar({ authEnabled = false }: { authEnabled?: boolean }) {
       </nav>
 
       {/* Mobile: bottom tab bar */}
+      <div className="md:hidden sticky top-0 z-40 border-b border-border bg-surface-elevated px-4 py-3">
+        <ProfileSwitcher />
+      </div>
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around bg-surface-elevated border-t border-border py-2 pb-[env(safe-area-inset-bottom)]">
         {NAV_ITEMS.map(({ href, label, icon }) => (
           <Link
