@@ -6,7 +6,9 @@ import {
   isDue,
   parseAutoSync,
   schedulerTick,
+  schedulerProfileTicks,
 } from "./auto-sync-scheduler";
+import { activeProfileId } from "./profile-context";
 
 vi.mock("@/lib/scheduled-sync", () => ({ runScheduledSync: vi.fn() }));
 
@@ -87,5 +89,49 @@ describe("schedulerTick", () => {
     const { sql } = fakeSql({ enabled: true, interval_minutes: 120 }, minutesAgo(500));
     expect(await schedulerTick({ sql, now: NOW, lastAttemptAt: minutesAgo(5), run })).toEqual({ ran: false });
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("scheduled profiles", () => {
+  const profiles = [{ id: "first", name: "First" }, { id: "second", name: "Second" }];
+  const sql = fakeSql({ enabled: true, interval_minutes: 30 }, null).sql;
+
+  it("passes each profile its own previous attempt and context", async () => {
+    const lastAttempts = new Map([["first", minutesAgo(5)]]);
+    const seen: string[] = [];
+    const tick = vi.fn(async (deps) => {
+      const id = await activeProfileId();
+      seen.push(id);
+      expect(deps.lastAttemptAt).toEqual(id === "first" ? minutesAgo(5) : null);
+      return id === "first" ? { ran: false } as const : { ran: true, outcome: { kind: "ran", ran: 1, synced: 1 } } as const;
+    });
+    await schedulerProfileTicks({ profiles, now: NOW, lastAttempts, getSql: () => sql, tick });
+    expect(seen).toEqual(["first", "second"]);
+    expect(lastAttempts.get("first")).toEqual(minutesAgo(5));
+    expect(lastAttempts.get("second")).toEqual(NOW);
+  });
+
+  it("continues with the second profile when the first fails", async () => {
+    const lastAttempts = new Map<string, Date>();
+    const seen: string[] = [];
+    const tick = vi.fn(async () => {
+      const id = await activeProfileId();
+      seen.push(id);
+      if (id === "first") throw new Error("Reconnect this account");
+      return { ran: true, outcome: { kind: "ran", ran: 1, synced: 1 } } as const;
+    });
+    const outcomes = await schedulerProfileTicks({ profiles, now: NOW, lastAttempts, getSql: () => sql, tick });
+    expect(seen).toEqual(["first", "second"]);
+    expect(outcomes[0].error).toBe("Reconnect this account");
+    expect(outcomes[1].result?.ran).toBe(true);
+    expect(lastAttempts.get("first")).toEqual(NOW);
+  });
+
+  it("honours a thirty-minute interval for each account", async () => {
+    const run = vi.fn(async () => ({ kind: "ran", ran: 0, synced: 0 }) as const);
+    const lastAttempts = new Map([["first", minutesAgo(29)], ["second", minutesAgo(30)]]);
+    await schedulerProfileTicks({ profiles, now: NOW, lastAttempts, getSql: () => sql,
+      tick: (deps) => schedulerTick({ ...deps, run }) });
+    expect(run).toHaveBeenCalledOnce();
   });
 });

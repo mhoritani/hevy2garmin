@@ -2,6 +2,8 @@ import type { getDb } from "@/lib/db";
 import { demoMode } from "@/lib/demo";
 import { builtinSchedulerEnabled } from "@/lib/server-schedule";
 import { runScheduledSync, type ScheduledSyncOutcome } from "@/lib/scheduled-sync";
+import { listProfiles, type Profile } from "./profiles";
+import { withProfile } from "./profile-context";
 
 /**
  * The built-in auto-sync scheduler for a self-hosted dashboard.
@@ -84,6 +86,32 @@ function describe(outcome: ScheduledSyncOutcome): string {
 
 const STARTED = Symbol.for("hevy2garmin.autoSyncScheduler");
 
+interface ProfileTickDeps {
+  profiles: Profile[];
+  now: Date;
+  lastAttempts: Map<string, Date>;
+  getSql: () => Sql;
+  tick?: typeof schedulerTick;
+}
+
+/** One failing or recently checked account must not prevent the next account's turn. */
+export async function schedulerProfileTicks({ profiles, now, lastAttempts, getSql, tick = schedulerTick }: ProfileTickDeps) {
+  const outcomes: { profile: Profile; result?: TickResult; error?: string }[] = [];
+  for (const profile of profiles) {
+    try {
+      const result = await withProfile(profile.id, () => tick({
+        sql: getSql(), now, lastAttemptAt: lastAttempts.get(profile.id) ?? null,
+      }));
+      if (result.ran) lastAttempts.set(profile.id, now);
+      outcomes.push({ profile, result });
+    } catch (error) {
+      lastAttempts.set(profile.id, now);
+      outcomes.push({ profile, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return outcomes;
+}
+
 /**
  * Starts the once-a-minute check in this process. Idempotent, and a no-op in
  * demo mode or when builtinSchedulerEnabled() says something else owns the schedule.
@@ -95,7 +123,7 @@ export function startAutoSyncScheduler(): void {
   g[STARTED] = true;
 
   let busy = false;
-  let lastAttemptAt: Date | null = null;
+  const lastAttempts = new Map<string, Date>();
 
   const tick = async () => {
     if (busy) return;
@@ -104,17 +132,11 @@ export function startAutoSyncScheduler(): void {
       // Imported lazily so a server without DATABASE_URL starts cleanly; the
       // tick then finds nothing to do until one is configured.
       const { getDb } = await import("@/lib/db");
-      let sql: Sql;
-      try {
-        sql = getDb();
-      } catch {
-        return;
-      }
-      const now = new Date();
-      const result = await schedulerTick({ sql, now, lastAttemptAt });
-      if (result.ran) {
-        lastAttemptAt = now;
-        console.log(`[auto-sync] ${describe(result.outcome)}`);
+      const profiles = await listProfiles();
+      const outcomes = await schedulerProfileTicks({ profiles, now: new Date(), lastAttempts, getSql: getDb });
+      for (const { profile, result, error } of outcomes) {
+        if (error) console.error(`[auto-sync] ${profile.name}: ${error}`);
+        else if (result?.ran) console.log(`[auto-sync] ${profile.name}: ${describe(result.outcome)}`);
       }
     } catch (err) {
       console.error(`[auto-sync] check failed: ${err instanceof Error ? err.message : String(err)}`);
