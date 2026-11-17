@@ -18,12 +18,15 @@
 import { getDb } from "./db";
 import { GarminAuth, DBTokenStore, type GarminClient } from "garmin-auth";
 import { resolveDatabaseUrl } from "./database-url";
+import { activeProfile } from "./profiles";
+import { activeProfileId } from "./profile-context";
+import { profileDatabaseUrl } from "./profile-database";
 
 /** The DI tokens live in platform_credentials at this platform key. */
 export const GARMIN_TOKEN_PLATFORM = "garmin_tokens";
 
-let cachedClient: GarminClient | null = null;
-let normalized = false;
+const clients = new Map<string, Promise<GarminClient>>();
+const normalized = new Set<string>();
 
 /**
  * Self-heal the token row (#459). garmin-auth < 0.3 (Python 0.2.x) wrote the DI payload FLAT
@@ -32,7 +35,8 @@ let normalized = false;
  * "reconnect Garmin" for no reason. Idempotent; runs once per process; never throws.
  */
 export async function normalizeGarminTokenRow(sql: ReturnType<typeof getDb>): Promise<void> {
-  if (normalized) return;
+  const id = await activeProfileId();
+  if (normalized.has(id)) return;
   try {
     await sql`
       UPDATE platform_credentials
@@ -40,7 +44,7 @@ export async function normalizeGarminTokenRow(sql: ReturnType<typeof getDb>): Pr
        WHERE platform = ${GARMIN_TOKEN_PLATFORM}
          AND credentials ? 'di_token'
          AND NOT (credentials ? 'garmin_tokens')`;
-    normalized = true;
+    normalized.add(id);
   } catch { /* best effort: DBTokenStore reports the real problem if any */ }
 }
 
@@ -54,17 +58,23 @@ export async function normalizeGarminTokenRow(sql: ReturnType<typeof getDb>): Pr
  * This authenticates only; it does not upload or mutate any activity.
  */
 export async function getGarminClient(databaseUrl?: string): Promise<GarminClient> {
-  if (cachedClient) return cachedClient;
-  const url = databaseUrl ?? resolveDatabaseUrl();
-  if (!url) throw new Error("DATABASE_URL not set (cannot load Garmin tokens)");
-  try { await normalizeGarminTokenRow(getDb()); } catch { /* no DB handle: DBTokenStore reports it */ }
-  const store = new DBTokenStore(url, GARMIN_TOKEN_PLATFORM);
-  const auth = new GarminAuth({ store });
-  cachedClient = await auth.client();
-  return cachedClient;
+  const profile = await activeProfile();
+  let pending = clients.get(profile.id);
+  if (!pending) {
+    pending = (async () => {
+      const url = databaseUrl ?? resolveDatabaseUrl();
+      if (!url) throw new Error("DATABASE_URL not set (cannot load Garmin tokens)");
+      try { await normalizeGarminTokenRow(getDb()); } catch { /* DBTokenStore reports the real failure. */ }
+      const store = new DBTokenStore(profileDatabaseUrl(profile.id, url), GARMIN_TOKEN_PLATFORM);
+      return new GarminAuth({ store }).client();
+    })().catch((error) => { clients.delete(profile.id); throw error; });
+    clients.set(profile.id, pending);
+  }
+  return pending;
 }
 
 /** Reset the cached client (test seam / after a token rotation). */
-export function resetGarminClient(): void {
-  cachedClient = null;
+export function resetGarminClient(profileId?: string): void {
+  if (profileId) clients.delete(profileId);
+  else clients.clear();
 }

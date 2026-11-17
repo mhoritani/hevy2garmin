@@ -107,15 +107,16 @@ export const SCHEMA_TABLES = [
 /** A raw-SQL runner: postgres.js `client.unsafe(text)`. */
 export type UnsafeRunner = { unsafe: (text: string) => Promise<unknown> };
 
-let ready: Promise<boolean> | null = null;
+let ready = new WeakMap<UnsafeRunner, Promise<boolean>>();
 
 /**
  * Run the schema statements once per process. Resolves true when every
  * statement ran, false when one failed (already logged). Never rejects.
  */
 export function ensureSchema(db: UnsafeRunner): Promise<boolean> {
-  if (ready) return ready;
-  ready = (async () => {
+  const existing = ready.get(db);
+  if (existing) return existing;
+  const pending = (async () => {
     for (const text of SCHEMA_STATEMENTS) {
       try {
         await db.unsafe(text);
@@ -127,10 +128,11 @@ export function ensureSchema(db: UnsafeRunner): Promise<boolean> {
     }
     return true;
   })();
-  return ready;
+  ready.set(db, pending);
+  return pending;
 }
 
 /** Tests only. */
 export function resetSchemaForTests(): void {
-  ready = null;
+  ready = new WeakMap();
 }

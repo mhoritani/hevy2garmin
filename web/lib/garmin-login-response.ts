@@ -4,14 +4,17 @@ import { GARMIN_TOKEN_PLATFORM, resetGarminClient } from "@/lib/garmin-upload";
 import { tokensFromResult, type WorkerLoginResult } from "@/lib/garmin-login-worker";
 import { clearCooldown } from "@/lib/garmin-cooldown";
 import { getDb } from "@/lib/db";
+import { activeProfile } from "./profiles";
+import { profileDatabaseUrl } from "./profile-database";
 
 /** Persist the DI tokens (nested {garmin_tokens:{...}}) for the sync engine. */
 async function persist(url: string, result: WorkerLoginResult): Promise<void> {
   const tokens = tokensFromResult(result);
   if (!tokens) throw new Error("Login succeeded but no DI tokens were returned.");
-  const store = new DBTokenStore(url, GARMIN_TOKEN_PLATFORM);
+  const profile = await activeProfile();
+  const store = new DBTokenStore(profileDatabaseUrl(profile.id, url), GARMIN_TOKEN_PLATFORM);
   await store.save(tokens);
-  resetGarminClient();
+  resetGarminClient(profile.id);
 }
 
 /** Map a Worker result to the HTTP response both Garmin login steps consume. */
