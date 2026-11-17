@@ -8,7 +8,7 @@
  * every one `IF NOT EXISTS`, so running them against a populated database is
  * a no-op.
  *
- * Runs once per process: `getDb()` makes every query wait on the memoised
+ * Runs once per database client: `getDb()` makes every query wait on the memoised
  * promise, so the first write cannot race the CREATEs. It never rejects; on
  * failure it logs and lets the real query report the real error, the same
  * contract as normalizeGarminTokenRow.

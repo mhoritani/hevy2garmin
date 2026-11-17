@@ -371,7 +371,11 @@ On Vercel, the dashboard's **Auto-sync** toggle and interval schedule that GitHu
 
 ### Several people on one server
 
-Each dashboard is one person: one password, one Hevy key, one Garmin account. For two people, run two instances side by side, each with its own database. `web/docker-compose.multi.example.yml` does this with one Postgres server: a database for each person, a dashboard for each (ports 8096 and 8097), and a one-shot `db-init` service that creates the extra database, also on an existing volume. Each person signs in to their own dashboard, connects Hevy and Garmin there, and turns on its **Auto-sync**.
+One self-hosted dashboard can manage several profiles with a shared dashboard password. Open **Profiles**, rename the existing **Default profile**, and add another person. Adding a profile opens its setup page: connect that person's Hevy key and Garmin account, then enable **Auto-sync** and choose **30 minutes**. Each profile has separate credentials, sync history, settings and overlap locks. The built-in scheduler checks every enabled profile independently; one account's failed sign-in does not prevent another account's run. The existing grace period still applies before a recent workout becomes eligible for upload.
+
+Existing account data stays intact when upgrading. New profiles start empty with auto-sync off and a thirty-minute interval. The profile selector changes the active person, and other tabs reload to keep their displayed person consistent. Anyone signed into the shared dashboard can manage every profile. Profiles target self-hosted Node/Docker deployments using the built-in scheduler.
+
+For separate dashboard passwords, `web/docker-compose.multi.example.yml` remains an alternative: a database and dashboard for each person (ports 8096 and 8097), with one Postgres server and a one-shot `db-init` service. Each person signs into their own dashboard, connects Hevy and Garmin, and enables **Auto-sync**.
 
 ```bash
 cd hevy2garmin/web
