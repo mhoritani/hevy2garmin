@@ -22,6 +22,7 @@ export function profileSchema(id: string): string {
 /** Scope garmin-auth's independent pg connections too, without a public fallback. */
 export function profileDatabaseUrl(id: string, databaseUrl = resolveDatabaseUrl()): string {
   if (!databaseUrl) throw new Error(`No Postgres connection string. Set one of: ${DATABASE_URL_HINT}`);
+  if (id === "default") return databaseUrl;
   const url = new URL(databaseUrl);
   const previous = url.searchParams.get("options");
   url.searchParams.set("options", [previous, `-c search_path=${profileSchema(id)}`].filter(Boolean).join(" "));
