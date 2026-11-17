@@ -12,8 +12,10 @@
  */
 import type { FitProfile, MergeSettings } from "hevy2garmin";
 import type { Sql } from "./pending-store";
+import { effectiveGraceMinutes } from "./sync-grace";
 
 export interface SyncSettings {
+  graceMinutes: number;
   merge: MergeSettings;
   hrFusion: boolean;
   descriptionEnabled: boolean;
@@ -26,6 +28,7 @@ export interface SyncSettings {
 
 /** What a fresh install syncs with: merge on, sets pushed into the watch activity. */
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  graceMinutes: effectiveGraceMinutes(undefined),
   merge: {
     enabled: true,
     watchStrategy: "merge",
@@ -104,11 +107,12 @@ export async function loadCustomMappings(sql: Sql): Promise<Record<string, [numb
  * with merge silently off.
  */
 export async function loadSyncSettings(sql: Sql): Promise<SyncSettings> {
-  const [mergeCfg, hrCfg, profileCfg, timingCfg, customMappings] = await Promise.all([
+  const [mergeCfg, hrCfg, profileCfg, timingCfg, syncCfg, customMappings] = await Promise.all([
     readConfig(sql, "merge_settings"),
     readConfig(sql, "hr_fusion"),
     readConfig(sql, "user_profile"),
     readConfig(sql, "timing"),
+    readConfig(sql, "sync"),
     loadCustomMappings(sql),
   ]);
 
@@ -133,6 +137,7 @@ export async function loadSyncSettings(sql: Sql): Promise<SyncSettings> {
     : d.merge.activityTypes!;
 
   return {
+    graceMinutes: effectiveGraceMinutes(syncCfg?.grace_period_minutes),
     merge: {
       enabled: bool(mergeCfg?.merge_mode, d.merge.enabled!),
       watchStrategy:

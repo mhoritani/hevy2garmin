@@ -15,6 +15,7 @@ interface Props {
   builtinScheduler?: boolean;
   autoSyncEnabled: boolean;
   autoSyncInterval: number;
+  graceMinutes: number;
   hrFusionEnabled: boolean;
   mergeWatchStrategy: string;
   weightKg: number | null;
@@ -96,6 +97,7 @@ export function SettingsForm(p: Props) {
     finally { setPulling(false); }
   }
   const [interval, setIntervalMin] = useState(p.autoSyncInterval);
+  const [graceMinutes, setGraceMinutes] = useState(String(p.graceMinutes));
   const [hrFusion, setHrFusion] = useState(p.hrFusionEnabled);
   const [strategy, setStrategy] = useState(p.mergeWatchStrategy);
   const [weight, setWeight] = useState(p.weightKg != null ? String(p.weightKg) : "");
@@ -145,6 +147,7 @@ export function SettingsForm(p: Props) {
       const extras = extraTypes.split(",").map((t) => t.trim()).filter(Boolean);
       const body = {
         auto_sync: { enabled: autoSync, interval_minutes: interval },
+        sync: { grace_period_minutes: graceMinutes },
         hr_fusion: { enabled: hrFusion },
         merge_settings: {
           merge_watch_strategy: strategy,
@@ -209,14 +212,24 @@ export function SettingsForm(p: Props) {
             <span className="text-sm font-semibold text-text">Auto-sync</span>
             <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="h-4 w-4 accent-teal" />
           </label>
-          <p className="mb-2 mt-0.5 text-xs text-text-muted">Poll Hevy and push new workouts on a schedule.</p>
-          <label className={labelCls} htmlFor="sf-interval">Interval</label>
+          <p className="mb-2 mt-0.5 text-xs text-text-muted">Check Hevy for eligible workouts on a schedule.</p>
+          <label className={labelCls} htmlFor="sf-interval">Check interval</label>
           <select id="sf-interval" value={interval} onChange={(e) => setIntervalMin(Number.parseInt(e.target.value, 10))} disabled={!autoSync} className={`${controlCls} disabled:opacity-50`}>
             {INTERVALS.map((m) => (<option key={m} value={m}>{fmtInterval(m)}</option>))}
           </select>
         </div>
         )}
-        <Toggle label="HR fusion" checked={hrFusion} onChange={setHrFusion} hint="Pull heart-rate from a matched Garmin activity into the synced workout." />
+        <div className={cardCls}>
+          <label className={labelCls} htmlFor="sf-grace">Workout waiting period (minutes)</label>
+          <input id="sf-grace" type="number" min={0} max={1440} step={1} required value={graceMinutes} onChange={(e) => setGraceMinutes(e.target.value)} className={controlCls} />
+          <p className="mt-1.5 text-xs text-text-muted">
+            Scheduled sync waits this long after a workout ends, then picks it up at the next check.
+            Use 0 if you record only in Hevy. If you also record an activity on your Garmin watch,
+            allow time for it to upload (default: 120 minutes) so the activities can be matched.
+            Sync Now skips this wait.
+          </p>
+        </div>
+        <Toggle label="HR fusion" checked={hrFusion} onChange={setHrFusion} hint="Pull heart rate from a matched Garmin activity or Garmin's daily monitoring feed into the synced workout." />
       </div>
 
       {/* Profile */}

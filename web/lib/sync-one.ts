@@ -121,6 +121,7 @@ export async function syncOneWorkout(sql: Sql, options: SyncOneOptions = {}) {
   const { fetchWorkouts: _f, garminClientFactory: _g, ...engineOptions } = options;
   const saved = await loadSyncSettings(sql);
   return engineSyncOneWorkout(buildSyncDeps(sql, options), {
+    graceMinutes: saved.graceMinutes,
     merge: saved.merge,
     hrFusion: saved.hrFusion,
     descriptionEnabled: saved.descriptionEnabled,

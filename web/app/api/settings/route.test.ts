@@ -170,3 +170,27 @@ describe("sync start date", () => {
     expect(writes.find((w) => w.key === "sync_window")?.value.start_date).toBe("");
   });
 });
+
+
+describe("workout waiting period", () => {
+  it("saves zero, which disables only the profile's watch-upload wait", async () => {
+    const res = await POST(req({ sync: { grace_period_minutes: 0 } }));
+    expect(res.status).toBe(200);
+    expect(saved("sync")).toEqual({ grace_period_minutes: 0 });
+  });
+
+  it("accepts a whole number of minutes from the form", async () => {
+    const res = await POST(req({ sync: { grace_period_minutes: "120" } }));
+    expect(res.status).toBe(200);
+    expect(saved("sync")).toEqual({ grace_period_minutes: 120 });
+  });
+
+  it.each([null, "", " ", true, -1, 1.5, 1441, "abc"])(
+    "refuses an invalid wait (%j) before saving any other settings",
+    async (value) => {
+      const res = await POST(req({ sync: { grace_period_minutes: value }, hr_fusion: { enabled: false } }));
+      expect(res.status).toBe(400);
+      expect(writes).toEqual([]);
+    },
+  );
+});

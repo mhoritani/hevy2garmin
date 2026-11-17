@@ -17,7 +17,7 @@ function fmtInterval(m: number): string {
  * (DB-only) and the interval to /api/settings (auto_sync.interval_minutes) —
  * both editable in Settings too; this is the quick control.
  */
-export function AutoSyncToggle({ enabled, interval = 120 }: { enabled: boolean; interval?: number }) {
+export function AutoSyncToggle({ enabled, interval = 120, graceMinutes }: { enabled: boolean; interval?: number; graceMinutes: number }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,9 +72,16 @@ export function AutoSyncToggle({ enabled, interval = 120 }: { enabled: boolean; 
         <div className="text-sm font-medium text-text">Auto-sync</div>
         <div className="text-xs text-text-muted">
           {enabled
-            ? `On — new workouts sync every ${fmtInterval(interval)}.`
+            ? `On — checks every ${fmtInterval(interval)}.`
             : "Off — sync only when you run it."}
         </div>
+        {enabled && (
+          <div className="mt-1 text-xs text-text-muted">
+            {graceMinutes === 0
+              ? "No workout waiting period — eligible at the next check."
+              : `Workouts wait ${fmtInterval(graceMinutes)} after finishing, then sync at the next check.`}
+          </div>
+        )}
         {error && (
           <div className="mt-1 text-xs text-danger" role="alert">
             {error}
@@ -86,7 +93,7 @@ export function AutoSyncToggle({ enabled, interval = 120 }: { enabled: boolean; 
           value={interval}
           onChange={(e) => changeInterval(Number.parseInt(e.target.value, 10))}
           disabled={busy}
-          aria-label="Auto-sync interval"
+          aria-label="Auto-sync check interval"
           className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus:border-teal focus:outline-none disabled:opacity-50"
         >
           {INTERVALS.map((m) => (

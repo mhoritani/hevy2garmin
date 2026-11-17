@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { normaliseTimeZone } from "@/lib/timezone";
+import { parseGraceMinutes } from "@/lib/sync-grace";
 import { saveGithubPat } from "@/lib/github";
 import { saveConfigKey } from "@/lib/config";
 import { verifySession, SESSION_COOKIE, authEnabled } from "@/lib/auth";
@@ -52,6 +53,8 @@ function sanitise(key: string, raw: Obj): Obj {
       const n = Number(raw.interval_minutes);
       out.interval_minutes = INTERVALS.includes(n) ? n : 120;
     }
+  } else if (key === "sync") {
+    if ("grace_period_minutes" in raw) out.grace_period_minutes = parseGraceMinutes(raw.grace_period_minutes);
   } else if (key === "hr_fusion") {
     if ("enabled" in raw) out.enabled = Boolean(raw.enabled);
   } else if (key === "merge_settings") {
@@ -122,7 +125,7 @@ function sanitise(key: string, raw: Obj): Obj {
   return out;
 }
 
-const EDITABLE = ["auto_sync", "hr_fusion", "merge_settings", "user_profile", "timing", "sync_window"];
+const EDITABLE = ["sync", "auto_sync", "hr_fusion", "merge_settings", "user_profile", "timing", "sync_window"];
 
 export async function POST(request: Request) {
   // Gate only when a password is configured (prod). With no password set the app
@@ -139,6 +142,14 @@ export async function POST(request: Request) {
     body = (await request.json()) as Obj;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  if (isObj(body.sync) && "grace_period_minutes" in body.sync &&
+      parseGraceMinutes(body.sync.grace_period_minutes) === undefined) {
+    return NextResponse.json(
+      { error: "Workout waiting period must be a whole number of minutes from 0 to 1440." },
+      { status: 400 },
+    );
   }
 
   const sw = isObj(body.sync_window) ? (body.sync_window as Obj).start_date : undefined;

@@ -93,6 +93,28 @@ describe("syncOneWorkout (route shim)", () => {
     });
   });
 
+  it("lets a Hevy-only profile skip the watch-upload wait while keeping HR fusion", async () => {
+    const sql = makeSql({ sync: { grace_period_minutes: 0 } }) as never;
+    await syncOneWorkout(sql, { respectGrace: true });
+    expect(h.engine.syncOneWorkout.mock.calls[0][1]).toMatchObject({
+      respectGrace: true,
+      graceMinutes: 0,
+      hrFusion: true,
+      merge: { enabled: true, watchStrategy: "merge" },
+    });
+  });
+
+  it("keeps the engine's default watch-upload wait until the profile changes it", async () => {
+    await syncOneWorkout(SQL, { respectGrace: true });
+    expect(h.engine.syncOneWorkout.mock.calls[0][1]).toMatchObject({ graceMinutes: 120 });
+  });
+
+  it("lets an explicit wait override the saved profile value", async () => {
+    const sql = makeSql({ sync: { grace_period_minutes: 0 } }) as never;
+    await syncOneWorkout(sql, { respectGrace: true, graceMinutes: 60 });
+    expect(h.engine.syncOneWorkout.mock.calls[0][1]).toMatchObject({ graceMinutes: 60 });
+  });
+
   it("an explicit option still beats the saved setting", async () => {
     const sql = makeSql({ hr_fusion: { enabled: true } }) as never;
     await syncOneWorkout(sql, { dryRun: true, hrFusion: false });

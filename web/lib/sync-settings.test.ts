@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { syncOneWorkout as engineSync, type SyncDeps } from "hevy2garmin";
 import { loadSyncSettings, loadCustomMappings, DEFAULT_SYNC_SETTINGS } from "./sync-settings";
 import type { Sql } from "./pending-store";
 
@@ -57,6 +58,20 @@ describe("loadSyncSettings", () => {
     expect(s.hrFusion).toBe(false);
     expect(s.descriptionEnabled).toBe(false);
   });
+
+  it("reads the canonical per-profile wait without treating zero as missing", async () => {
+    const settings = await loadSyncSettings(fakeSql({ sync: { grace_period_minutes: 0 } }));
+    expect(settings.graceMinutes).toBe(0);
+    expect(settings.hrFusion).toBe(true);
+  });
+
+  it.each([undefined, null, "", -1, 1.5, 1441, true])(
+    "retains the safe engine default for an absent or invalid stored wait (%j)",
+    async (value) => {
+      const settings = await loadSyncSettings(fakeSql({ sync: { grace_period_minutes: value } }));
+      expect(settings.graceMinutes).toBe(120);
+    },
+  );
 
   it("turns the stored percentage into the fraction the matcher compares against", async () => {
     // 85 in the form, 0.85 in the engine. Passing 85 through would reject every
@@ -186,5 +201,33 @@ describe("the profile and timing settings", () => {
 
   it("is empty for a database with nothing saved", async () => {
     expect((await loadSyncSettings(fakeSql())).profile).toEqual({});
+  });
+});
+
+
+describe("scheduled workout eligibility with the real engine", () => {
+  it.each([
+    [0, "dry_run", "would_upload"],
+    [120, "deferred", "within_grace"],
+  ])("applies a saved %i-minute wait to a workout finished 30 minutes ago", async (wait, status, decision) => {
+    const now = Date.now();
+    const settings = await loadSyncSettings(fakeSql({ sync: { grace_period_minutes: wait } }));
+    const deps = {
+      store: {
+        loadSyncedIds: async () => new Set<string>(),
+        loadPendingIds: async () => new Set<string>(),
+        isSynced: async () => false,
+      },
+      fetchWorkouts: async () => [{
+        id: "timing-fixture", title: "Timing fixture", exercises: [],
+        start_time: new Date(now - 90 * 60000).toISOString(),
+        end_time: new Date(now - 30 * 60000).toISOString(),
+      }],
+      gateway: async () => ({ findExistingActivity: async () => null }),
+    } as unknown as SyncDeps;
+    // In-memory FIT preview only. No credentials, network or write-capable gateway.
+    const result = await engineSync(deps, { ...settings, dryRun: true, respectGrace: true });
+    expect(result.status).toBe(status);
+    expect(result.dedupDecision).toBe(decision);
   });
 });

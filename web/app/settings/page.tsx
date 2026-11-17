@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { effectiveGraceMinutes } from "@/lib/sync-grace";
 import { DatabaseDownPage } from "@/components/database-down";
 import { ifNoTable } from "@/lib/missing-table";
 import { SettingsForm } from "@/components/settings-form";
@@ -36,7 +37,7 @@ interface SettingsData {
 const EMPTY: SettingsData = { dbConfigured: false, platforms: [], config: [], syncedCount: 0 };
 
 // The user-editable config the Python app persists to app_cache (config.py).
-const CONFIG_KEYS = ["user_profile", "timing", "hr_fusion", "merge_settings", "auto_sync", "sync_window"];
+const CONFIG_KEYS = ["user_profile", "timing", "hr_fusion", "merge_settings", "auto_sync", "sync_window", "sync"];
 
 async function loadSettings(): Promise<SettingsData> {
   let sql: ReturnType<typeof getDb>;
@@ -214,6 +215,7 @@ export default async function SettingsPage() {
           builtinScheduler={builtinSchedulerEnabled()}
           autoSyncEnabled={Boolean(autoSync.enabled)}
           autoSyncInterval={Number(autoSync.interval_minutes) || 120}
+          graceMinutes={effectiveGraceMinutes(cfg("sync").grace_period_minutes)}
           hrFusionEnabled={hrFusion.enabled == null ? true : Boolean(hrFusion.enabled)}
           mergeWatchStrategy={String(merge.merge_watch_strategy ?? "merge")}
           weightKg={numOrNull(profile.weight_kg)}
