@@ -21,3 +21,8 @@ export async function activeProfileId(): Promise<string> {
     throw error;
   }
 }
+
+/** Environment credentials belong to the original account, never a newly added person. */
+export async function legacyEnvironmentValue(name: string): Promise<string | undefined> {
+  return (await activeProfileId()) === DEFAULT_PROFILE_ID ? process.env[name] : undefined;
+}

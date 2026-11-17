@@ -16,7 +16,7 @@
  */
 import { HevyClient, HevyAuthError } from "hevy2garmin";
 import { getDb } from "./db";
-import { activeProfileId, DEFAULT_PROFILE_ID } from "./profile-context";
+import { legacyEnvironmentValue } from "./profile-context";
 
 /** Read the stored Hevy API key from platform_credentials (platform='hevy'). */
 async function keyFromDb(): Promise<string | null> {
@@ -42,7 +42,7 @@ async function keyFromDb(): Promise<string | null> {
 /** Resolve the Hevy API key (arg → env → DB), or null. Exposed for raw calls. */
 export async function resolveHevyKey(key?: string | null): Promise<string | null> {
   const explicit = key?.trim();
-  const fromEnv = (await activeProfileId()) === DEFAULT_PROFILE_ID ? process.env.HEVY_API_KEY?.trim() : undefined;
+  const fromEnv = (await legacyEnvironmentValue("HEVY_API_KEY"))?.trim();
   return explicit || fromEnv || (await keyFromDb());
 }
 
@@ -115,7 +115,7 @@ async function setHevyKeyStatus(status: "active" | "disconnected"): Promise<void
     `;
     // A key from HEVY_API_KEY has no row to mark, so a rejected one would stay
     // invisible. Write a row that holds only the status, never the key.
-    if (updated.length === 0 && process.env.HEVY_API_KEY?.trim() && (await activeProfileId()) === DEFAULT_PROFILE_ID) {
+    if (updated.length === 0 && (await legacyEnvironmentValue("HEVY_API_KEY"))?.trim()) {
       await sql`
         INSERT INTO platform_credentials (platform, auth_type, credentials, status)
         VALUES ('hevy', 'api_key', '{}'::jsonb, ${status})
